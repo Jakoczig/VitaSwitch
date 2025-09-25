@@ -151,17 +151,16 @@ static void parse_switchconf(int *has_psvs, int *has_vg) {
     if (strstr(buf, "PSVs 1")) *has_psvs = 1;
     if (strstr(buf, "VG 1"))   *has_vg   = 1;
 }
-
 // --- Update LiveArea background ---
 static void update_livearea_bg(int new_state) {
     const char *src = (new_state == 0) ? BG_PORTABLE : BG_DOCKED;
-    safe_rename(src, BG_LIVEAREA);
+    copy_file(src, BG_LIVEAREA);  // <-- use copy_file instead of safe_rename
 }
 
 // --- Update icon0.png ---
 static void update_icon0(int new_state) {
     const char *src = (new_state == 0) ? ICON_PORTABLE : ICON_DOCKED;
-    safe_rename(src, ICON_LIVEAREA);
+    copy_file(src, ICON_LIVEAREA);  // <-- use copy_file instead of safe_rename
 }
 
 int main() {

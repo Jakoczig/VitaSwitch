@@ -6,7 +6,7 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 # --- App info ---
 set(VITA_APP_NAME "VitaSwitch")
 set(VITA_TITLEID  "SWCH00001")
-set(VITA_VERSION  "01.20")
+set(VITA_VERSION  "01.21")
 
 # --- Source files ---
 add_executable(${PROJECT_NAME}
