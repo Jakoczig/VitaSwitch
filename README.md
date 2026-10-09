@@ -1,90 +1,76 @@
 # VitaSwitch
 
-VitaSwitch is a PS Vita homebrew utility that switches the **taiHEN plugin
-configuration**, **PSVshell profiles**, and **VitaGrafix configuration** between
-portable and docked presets. The program deliberately has no in-app UI: after
-a successful switch, it requests a reboot. **Version 1.22** focuses on safe
-file handling and crash recovery; it has **not yet been validated on real Vita
-hardware**.
+This is a small utility for the PS Vita that allows **fast switching between docked and portable configurations** for your plugins and system performance.
 
-## Before using it
+It automatically checks for the following configuration files and profiles:
 
-1. **Back up** `ur0:tai/config.txt`, `ur0:data/PSVshell/profiles/`, and
-   `ux0:data/VitaGrafix/config.txt` (for whichever components you use). Keep a
-   copy somewhere off the PS Vita. VitaShell or a similar file manager can do this.
-2. Install the VPK and launch it once for first-run setup. It creates portable
-   and docked backups **without replacing existing profiles**, then exits.
-3. Edit your docked or portable configuration as desired, or use AutoPlugin 2
-   while the corresponding mode is active.
-4. Launch VitaSwitch again to switch modes. It updates the mode marker and
-   requests a cold reboot only after the configuration transaction commits.
+- **PSVshell** (overclock plugin)
+- **VitaGrafix**
 
-The current mode is recorded in `ur0:tai/switchstate.txt` (`0` = portable,
-`1` = docked). The existing `ur0:tai/switchconf.txt` setup marker is retained
-for compatibility with older installations, but plugin presence is checked on
-each switch rather than using its old cached values. Installing PSVshell or
-VitaGrafix after VitaSwitch setup is supported; the first switch will initialize
-missing mode profiles from the plugin's current configuration.
+and switches them alongside your `ur0:tai/config.txt` when they are present.
 
-## How version 1.22 protects configurations
+---
 
-- Reads and writes check error returns; short writes are retried.
-- Copies are staged and completed before the original active configuration is
-  renamed, and both mode backups are retained.
-- The active and outgoing backups are moved aside under `.vsw-old` names until
-  all configured components have switched and the mode marker has been written.
-- `ur0:tai/vitaswitch.transaction` records the old state. A separate
-  `vitaswitch.committed` marker makes post-commit cleanup resumable.
-- If an operation fails before commit, VitaSwitch restores the original paths
-  and **does not reboot**. On the next launch after an interrupted transaction,
-  it attempts recovery and exits; launch it once more to switch.
-- Fatal errors are written to `ur0:tai/vitaswitch-error.txt`.
+## How It Works
 
-### Important limits
+1. **Automatic First-Time Setup**
+   - On the first run, the app creates portable and docked copies of your current configurations without overwriting existing mode presets.
+   - After setup, the app **closes itself**.
+   - New presets initially contain the same settings. Customize them to suit your docked and portable setups.
 
-A **multi-file or multi-directory switch is not a single atomic filesystem
-operation**. An abrupt power cut can happen between moving the active
-`ur0:tai/config.txt` to `ur0:tai/config.txt.vsw-old` and putting its replacement
-in place. The original configuration should still exist under its recovery
-name, but the missing active file may affect boot. If VitaSwitch cannot run,
-**use VitaShell or another recovery method** to inspect the files, keep an
-additional backup of everything, and restore the `.vsw-old` item to its original
-name. Do not delete `.vsw-old` files before recovering. The transaction should
-normally repair this on the next VitaSwitch launch if the app can start.
+2. **Switching Between Modes**
+   - Reads the current mode from `ur0:tai/switchstate.txt`:
+     - `0` = portable
+     - `1` = docked
+   - Saves changes made to the active configuration and loads the other mode.
+   - Updates the mode marker and **reboots automatically after a successful switch**.
 
-The program assumes the Vita supports exclusive file creation, directory/file
-renames within one volume, and `sceIoSyncByFd`. These operations must be tested
-on a real device before distributing the update widely. It intentionally fails
-closed if it cannot establish a safe transition. The app still relies on the
-`ur0:tai/config.txt` setup and does not automatically switch an `ux0:tai`
-installation.
+3. **Dynamic Icon Feedback**
+   - Updates the app icon and LiveArea background for the selected mode when the required artwork is available.
+   - Keeps the alternative artwork files for future switches.
 
-## Build
+4. **Plugin Config Editing**
+   - You can continue using **AutoPlugin 2** to edit the configuration for the active mode.
+   - PSVshell and VitaGrafix configurations added after initial setup are checked on subsequent switches.
 
-Install [VitaSDK](https://vitasdk.org/), set `VITASDK`, and add its `bin`
-directory to `PATH`. Then build using CMake and the Vita toolchain:
+5. **Safer Switching in v1.22**
+   - Checks file operations and prepares replacement files before switching.
+   - Keeps recovery copies during the switch and attempts to restore the previous configuration if an operation fails before completion.
+   - On the next launch after an interrupted switch, it attempts recovery and exits. Launch it again afterward to switch modes.
 
-```sh
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
-cmake --build build
-```
+---
 
-The build emits a `.self` and `.vpk`. The source explicitly links
-`SceIofilemgr_stub`, `SceKernelThreadMgr_stub`, and `ScePower_stub`.
+## Important Notes
 
-## Host-side regression tests
+- **Back up your configurations before installing or updating.**
+  - Keep a separate copy outside the PS Vita. The app's mode presets are not a replacement for an independent backup.
 
-Linux host tests use a Vita I/O compatibility shim with injected I/O errors and
-simulated process crashes. They **do not replace VitaSDK compilation or physical
-hardware testing**.
+- **A temporary black screen during switching is normal.**
+  - The app has no in-app interface and requests a reboot after switching.
+  - **Do not force a restart or interrupt power while it is working.** Recovery support does not make a multi-file switch immune to power loss.
 
-```sh
-cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined \
-  -fno-omit-frame-pointer -g -I tests/mock_include \
-  main.c tests/mock_vita.c -o tests/vitaswitch_host
-python3 tests/test_switch.py
-```
+- **If a switch fails:**
+  - Check `ur0:tai/vitaswitch-error.txt` for the latest diagnostic message.
+  - Do not delete `.vsw-old` recovery files. See the [recovery guide](docs/RECOVERY.md).
+
+- **Supported configuration location:**
+  - VitaSwitch uses `ur0:tai/config.txt`. It does not automatically switch an `ux0:tai` installation.
+
+- **Use at your own risk.**
+  - This app is provided as-is. The author takes no responsibility for issues, crashes, or data loss.
+
+- **Coding disclaimer**
+  - I have no coding knowledge, so future updates or fixes are not guaranteed.
+  - Feel free to fork the project and improve it.
+
+---
+
+## Building and Testing
+
+See [building and host tests](docs/BUILDING.md) for the VitaSDK build commands and regression tests.
+
+---
 
 ## License
 
-MIT License. See `LICENSE`.
+MIT License - see `LICENSE` for details.
