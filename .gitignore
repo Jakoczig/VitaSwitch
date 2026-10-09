@@ -1,0 +1,5 @@
+build/
+*.self
+*.vpk
+tests/vitaswitch_host
+__pycache__/
