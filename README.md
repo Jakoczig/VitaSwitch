@@ -1,56 +1,90 @@
 # VitaSwitch
 
-This is a small utility for the PS Vita that allows **fast switching between docked and portable configurations** for your plugins and system performance.  
+VitaSwitch is a PS Vita homebrew utility that switches the **taiHEN plugin
+configuration**, **PSVshell profiles**, and **VitaGrafix configuration** between
+portable and docked presets. The program deliberately has no in-app UI: after
+a successful switch, it requests a reboot. **Version 1.22** focuses on safe
+file handling and crash recovery; it has **not yet been validated on real Vita
+hardware**.
 
-It **dynamically detects** if the following are installed:  
+## Before using it
 
-- **PSVshell** (overclock plugin)  
-- **VitaGrafix**  
+1. **Back up** `ur0:tai/config.txt`, `ur0:data/PSVshell/profiles/`, and
+   `ux0:data/VitaGrafix/config.txt` (for whichever components you use). Keep a
+   copy somewhere off the PS Vita. VitaShell or a similar file manager can do this.
+2. Install the VPK and launch it once for first-run setup. It creates portable
+   and docked backups **without replacing existing profiles**, then exits.
+3. Edit your docked or portable configuration as desired, or use AutoPlugin 2
+   while the corresponding mode is active.
+4. Launch VitaSwitch again to switch modes. It updates the mode marker and
+   requests a cold reboot only after the configuration transaction commits.
 
-and will switch only the relevant configurations if they are present.  
+The current mode is recorded in `ur0:tai/switchstate.txt` (`0` = portable,
+`1` = docked). The existing `ur0:tai/switchconf.txt` setup marker is retained
+for compatibility with older installations, but plugin presence is checked on
+each switch rather than using its old cached values. Installing PSVshell or
+VitaGrafix after VitaSwitch setup is supported; the first switch will initialize
+missing mode profiles from the plugin's current configuration.
 
----
+## How version 1.22 protects configurations
 
-## How It Works
+- Reads and writes check error returns; short writes are retried.
+- Copies are staged and completed before the original active configuration is
+  renamed, and both mode backups are retained.
+- The active and outgoing backups are moved aside under `.vsw-old` names until
+  all configured components have switched and the mode marker has been written.
+- `ur0:tai/vitaswitch.transaction` records the old state. A separate
+  `vitaswitch.committed` marker makes post-commit cleanup resumable.
+- If an operation fails before commit, VitaSwitch restores the original paths
+  and **does not reboot**. On the next launch after an interrupted transaction,
+  it attempts recovery and exits; launch it once more to switch.
+- Fatal errors are written to `ur0:tai/vitaswitch-error.txt`.
 
-1. **Automatic First-Time Setup**  
-   - On the first run after installation, the app creates the required backup copies of your plugin/config files.  
-   - After creating the backups, the app **closes itself**.  
-   - Once this setup is done, you can switch between modes at any time.
+### Important limits
 
-2. **Switching Between Modes**  
-   - Reads the current mode from `ur0:tai/switchstate.txt`:  
-     - `0` = portable  
-     - `1` = docked  
-   - Renames configuration files for the next mode.  
-   - Updates `switchstate.txt` to reflect the new mode.  
-   - Reboots the system automatically to apply the changes.  
+A **multi-file or multi-directory switch is not a single atomic filesystem
+operation**. An abrupt power cut can happen between moving the active
+`ur0:tai/config.txt` to `ur0:tai/config.txt.vsw-old` and putting its replacement
+in place. The original configuration should still exist under its recovery
+name, but the missing active file may affect boot. If VitaSwitch cannot run,
+**use VitaShell or another recovery method** to inspect the files, keep an
+additional backup of everything, and restore the `.vsw-old` item to its original
+name. Do not delete `.vsw-old` files before recovering. The transaction should
+normally repair this on the next VitaSwitch launch if the app can start.
 
-3. **Dynamic Icon Feedback**  
-   - The app dynamically changes its icon to indicate the **current mode** (portable or docked).  
-   - This helps you quickly see which mode is active without opening the app.  
+The program assumes the Vita supports exclusive file creation, directory/file
+renames within one volume, and `sceIoSyncByFd`. These operations must be tested
+on a real device before distributing the update widely. It intentionally fails
+closed if it cannot establish a safe transition. The app still relies on the
+`ur0:tai/config.txt` setup and does not automatically switch an `ux0:tai`
+installation.
 
-4. **Plugin Config Editing**  
-   - You can still use **AutoPlugin 2** normally to edit your plugin configurations during the selected mode.  
+## Build
 
----
+Install [VitaSDK](https://vitasdk.org/), set `VITASDK`, and add its `bin`
+directory to `PATH`. Then build using CMake and the Vita toolchain:
 
-## Important Notes
+```sh
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+cmake --build build
+```
 
-- **Black screen during switch is normal.**  
-  - The app renames configuration files and triggers a reboot, so a black screen will appear temporarily.  
-  - **Never force restart during this process**, as it may corrupt your `tai/config.txt`.  
+The build emits a `.self` and `.vpk`. The source explicitly links
+`SceIofilemgr_stub`, `SceKernelThreadMgr_stub`, and `ScePower_stub`.
 
-- **Use at your own risk.**  
-  - This app is provided as-is.  
-  - The author takes **no responsibility** for any issues, crashes, or data loss.  
+## Host-side regression tests
 
-- **Coding disclaimer**  
-  - I have **no coding knowledge**, so there may be no future updates or fixes.  
-  - Feel free to **fork** the project and improve it if you wish.  
+Linux host tests use a Vita I/O compatibility shim with injected I/O errors and
+simulated process crashes. They **do not replace VitaSDK compilation or physical
+hardware testing**.
 
----
+```sh
+cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined \
+  -fno-omit-frame-pointer -g -I tests/mock_include \
+  main.c tests/mock_vita.c -o tests/vitaswitch_host
+python3 tests/test_switch.py
+```
 
 ## License
 
-MIT License – see `LICENSE` for details.
+MIT License. See `LICENSE`.
